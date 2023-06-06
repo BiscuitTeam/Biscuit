@@ -13,13 +13,14 @@
 
 #include <time.h>
 
-#define PERF(expr, count_ptr)                   \
-  do {                                          \
-    ioctl (fd, PERF_EVENT_IOC_RESET, 0);        \
-    ioctl (fd, PERF_EVENT_IOC_ENABLE, 0);       \
-    expr;                                       \
-    ioctl (fd, PERF_EVENT_IOC_DISABLE, 0);      \
-    read (fd, count_ptr, sizeof (uint64_t));    \
+#define PERF(expr, count_ptr)                                         \
+  do {                                                                \
+    ioctl (fd, PERF_EVENT_IOC_RESET, 0);                              \
+    ioctl (fd, PERF_EVENT_IOC_ENABLE, 0);                             \
+    expr;                                                             \
+    ioctl (fd, PERF_EVENT_IOC_DISABLE, 0);                            \
+    if (read (fd, count_ptr, sizeof (uint64_t)) != sizeof (uint64_t)) \
+      return -1;                                                      \
   } while (0)
 
 

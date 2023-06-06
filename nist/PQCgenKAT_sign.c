@@ -81,8 +81,10 @@ main()
     fprintf(fp_rsp, "# %s\n\n", CRYPTO_ALGNAME);
     done = 0;
     do {
-        if ( FindMarker(fp_req, "count = ") )
-            fscanf(fp_req, "%d", &count);
+        if ( FindMarker(fp_req, "count = ") ) {
+            if (fscanf(fp_req, "%d", &count) != 1)
+              return KAT_DATA_ERROR;
+        }
         else {
             done = 1;
             break;
@@ -97,8 +99,10 @@ main()
         
         randombytes_init(seed, NULL, 256);
         
-        if ( FindMarker(fp_req, "mlen = ") )
-            fscanf(fp_req, "%llu", &mlen);
+        if ( FindMarker(fp_req, "mlen = ") ) {
+            if (fscanf(fp_req, "%llu", &mlen) != 1)
+              return KAT_DATA_ERROR;
+        }
         else {
             printf("ERROR: unable to read 'mlen' from <%s>\n", fn_req);
             return KAT_DATA_ERROR;
