@@ -2,5 +2,6 @@ SHA3_TARGET = AVX2
 UINTX_BITSIZE = 256
 BISCUIT_FILE = biscuit.c
 TARGET_ARCH = -mavx2
+# TEST_OPTIONS = -DUSE_PERF_EVENT
 
 include common.mk

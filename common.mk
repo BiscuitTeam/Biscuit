@@ -4,7 +4,8 @@ SHA3_SRC = $(wildcard sha3/*.c) $(wildcard sha3/$(SHA3_TARGET)/*.c)
 CC = gcc
 CFLAGS = -Wall -pedantic -Wextra -O3
 CPPFLAGS = -I. -Iutils -Ibatch_tools \
-           -Isha3/$(SHA3_TARGET) -DUINTX_BITSIZE=$(UINTX_BITSIZE)
+           -Isha3/$(SHA3_TARGET) -DUINTX_BITSIZE=$(UINTX_BITSIZE) \
+           $(TEST_OPTIONS)
 
 HDR = biscuit.h utils/utils.h batch_tools/batch_tools.h $(wildcard params*.h)
 SRC = $(BISCUIT_FILE) utils/utils.c batch_tools/batch_tools.c

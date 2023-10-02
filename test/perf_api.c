@@ -12,36 +12,7 @@
 
 #include <time.h>
 
-#define PERF(expr, count_ptr)                                           \
-  do {                                                                  \
-    ioctl (fd, PERF_EVENT_IOC_RESET, 0);                                \
-    ioctl (fd, PERF_EVENT_IOC_ENABLE, 0);                               \
-    expr;                                                               \
-    ioctl (fd, PERF_EVENT_IOC_DISABLE, 0);                              \
-    if (read (fd, count_ptr, sizeof (uint64_t)) != sizeof (uint64_t))   \
-      return -1;                                                        \
-  } while (0)
-  
-
-static long
-perf_event_open (struct perf_event_attr *hw_event, pid_t pid,
-                 int cpu, int group_fd, unsigned long flags)
-{
-  return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
-}
-
-static long
-init_perf (struct perf_event_attr *pe)
-{
-  memset (pe, 0, sizeof (struct perf_event_attr));
-  pe->type = PERF_TYPE_HARDWARE;
-  pe->size = sizeof (struct perf_event_attr);
-  pe->config = PERF_COUNT_HW_CPU_CYCLES;
-  pe->disabled = 1;
-  pe->exclude_kernel = 1;
-  pe->exclude_hv = 1;
-  return perf_event_open (pe, 0, -1, -1, 0);
-}
+#include "perf.h"
 
 #include "api.h"
 #include "rng.h"
@@ -51,8 +22,6 @@ init_perf (struct perf_event_attr *pe)
 int
 main (void)
 {
-  struct perf_event_attr pe;
-  long fd;
   long long count;
 
   int status;
@@ -60,12 +29,7 @@ main (void)
   unsigned long long mlen, smlen;
   unsigned char entropy_input[48] = { 0 };
 
-  fd = init_perf (&pe);
-  if (fd == -1)
-    {
-      fprintf (stderr, "Error opening leader %llx\n", pe.config);
-      exit (EXIT_FAILURE);
-    }
+  INIT_PERF ();
 
   pk = malloc (CRYPTO_PUBLICKEYBYTES);
   sk = malloc (CRYPTO_SECRETKEYBYTES);
