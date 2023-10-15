@@ -7,6 +7,7 @@ CPPFLAGS = -I. -Iutils -Ibatch_tools \
            -Isha3/$(SHA3_TARGET) -DUINTX_BITSIZE=$(UINTX_BITSIZE) \
            $(TEST_OPTIONS)
 
+HDR_PARAMS = $(wildcard params*.h)
 HDR = biscuit.h utils/utils.h batch_tools/batch_tools.h $(wildcard params*.h)
 SRC = $(BISCUIT_FILE) utils/utils.c batch_tools/batch_tools.c
 OBJ = $(SRC:.c=.o) $(SHA3_SRC:.c=.o) $(SHA3_ASM:.s=.o)
@@ -16,6 +17,11 @@ API_OBJ = nist/rng.o nist/api.o
 EXE = nist/PQCgenKAT_sign test/test test/perf_api test/benchmark
 
 all: $(EXE)
+
+batch_tools/batch_tools.o: batch_tools/batch_tools.c batch_tools/batch_tools.h \
+                           params_posso.h
+utils/utils.o: utils/utils.c utils/utils.h
+biscuit.o: biscuit.c biscuit.h $(HDR_PARAMS)
 
 test/test: test/test.c $(OBJ)
 test/benchmark: test/benchmark.c $(OBJ)
