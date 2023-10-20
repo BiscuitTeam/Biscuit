@@ -104,17 +104,16 @@ union vecX_t {
 #define batch_clear(dest, q, n) batch_clear_impl (dest)
 #define batch_copy(dest, src, q, n) batch_copy_impl (dest, src)
 #if IS_POW2(FIELD_SIZE)
+#define batch_neg(dest, q, n) batch_neg_impl ()
 #define batch_add(dest, src, q, n) batch_add_impl (dest, src)
 #define batch_sub(dest, src, q, n) batch_sub_impl (dest, src)
 #define batch_sum(dest, buf, j, q, n) batch_sum_impl (dest, buf, j)
+#define batch_mul(dest, src, q, n) batch_mul_impl (dest, src)
 #else
+#define batch_neg(dest, q, n) batch_neg_impl (dest, n)
 #define batch_add(dest, src, q, n) batch_add_impl (dest, src, n)
 #define batch_sub(dest, src, q, n) batch_sub_impl (dest, src, n)
 #define batch_sum(dest, buf, j, q, n) batch_sum_impl (dest, buf, j, n)
-#endif
-#if FIELD_SIZE == 2
-#define batch_mul(dest, src, q, n) batch_mul_impl (dest, src)
-#else
 #define batch_mul(dest, src, q, n) batch_mul_impl (dest, src, n)
 #endif
 #define batch_generate(output, q, n, extract, arg) \
@@ -125,15 +124,15 @@ union vecX_t {
 #define linear_circuit(x, y, z, sk, ct, i, q, n, m, d, f)         \
   linear_circuit_impl (x, y, z, sk, ct, i, f)
 #if DEGREE == 2
-#define eval_circuit(y, z, ct, sk, q, n, m, d, f)                 \
-  eval_circuit_impl (y, ct, sk, f)
-#define eval_circuit_seed(y, z, ct, sk, q, n, m, d, extract, arg) \
-  eval_circuit_seed_impl (y, ct, sk, extract, arg)
+#define eval_circuit(x, y, z, ct, sk, q, n, m, d, f)              \
+  eval_circuit_impl (x, y, ct, sk, f)
+#define eval_circuit_seed(x, y, z, ct, sk, q, n, m, d, extract, arg) \
+  eval_circuit_seed_impl (x, y, ct, sk, extract, arg)
 #else
-#define eval_circuit(y, z, ct, sk, q, n, m, d, f)                 \
-  eval_circuit_impl (y, z, ct, sk, f)
-#define eval_circuit_seed(y, z, ct, sk, q, n, m, d, extract, arg) \
-  eval_circuit_seed_impl (y, z, ct, sk, extract, arg)
+#define eval_circuit(x, y, z, ct, sk, q, n, m, d, f)              \
+  eval_circuit_impl (x, y, z, ct, sk, f)
+#define eval_circuit_seed(x, y, z, ct, sk, q, n, m, d, extract, arg) \
+  eval_circuit_seed_impl (x, y, z, ct, sk, extract, arg)
 #endif
 
 #else
@@ -145,6 +144,11 @@ union vecX_t {
 #define batch_export(dest, src, q, n, k) batch_export_impl (dest, src, n, k)
 #define batch_clear(dest, q, n) batch_clear_impl (dest, n)
 #define batch_copy(dest, src, q, n) batch_copy_impl (dest, src, n)
+#if IS_POW2(FIELD_SIZE)
+#define batch_neg(dest, q, n) batch_neg_impl ()
+#else
+#define batch_neg(dest, q, n) batch_neg_impl (dest, n)
+#endif
 #define batch_add(dest, src, q, n) batch_add_impl (dest, src, n)
 #define batch_sub(dest, src, q, n) batch_sub_impl (dest, src, n)
 #define batch_mul(dest, src, q, n) batch_mul_impl (dest, src, n)
@@ -159,15 +163,15 @@ union vecX_t {
 #define linear_circuit(x, y, z, sk, ct, i, q, n, m, d, f)         \
   linear_circuit_impl (x, y, z, sk, ct, i, n, m, f)
 #if DEGREE == 2
-#define eval_circuit(y, z, ct, sk, q, n, m, d, f)                 \
-  eval_circuit_impl (y, ct, sk, n, m, f)
-#define eval_circuit_seed(y, z, ct, sk, q, n, m, d, extract, arg) \
-  eval_circuit_seed_impl (y, ct, sk, n, m, extract, arg)
+#define eval_circuit(x, y, z, ct, sk, q, n, m, d, f)              \
+  eval_circuit_impl (x, y, ct, sk, n, m, f)
+#define eval_circuit_seed(x, y, z, ct, sk, q, n, m, d, extract, arg) \
+  eval_circuit_seed_impl (x, y, ct, sk, n, m, extract, arg)
 #else
-#define eval_circuit(y, z, ct, sk, q, n, m, d, f)                 \
-  eval_circuit_impl (y, z, ct, sk, n, m, f)
-#define eval_circuit_seed(y, z, ct, sk, q, n, m, d, extract, arg) \
-  eval_circuit_seed_impl (y, z, ct, sk, n, m, extract, arg)
+#define eval_circuit(x, y, z, ct, sk, q, n, m, d, f)              \
+  eval_circuit_impl (x, y, z, ct, sk, n, m, f)
+#define eval_circuit_seed(x, y, z, ct, sk, q, n, m, d, extract, arg) \
+  eval_circuit_seed_impl (x, y, z, ct, sk, n, m, extract, arg)
 #endif
 
 #else
@@ -177,15 +181,15 @@ union vecX_t {
 #define linear_circuit(x, y, z, sk, ct, i, q, n, m, d, f)         \
   linear_circuit_impl (x, y, z, sk, ct, i, n, m, d, f)
 #if DEGREE == 2
-#define eval_circuit(y, z, ct, sk, q, n, m, d, f)                 \
-  eval_circuit_impl (y, ct, sk, n, m, d, f)
-#define eval_circuit_seed(y, z, ct, sk, q, n, m, d, extract, arg) \
-  eval_circuit_seed_impl (y, ct, sk, n, m, d, extract, arg)
+#define eval_circuit(x, y, z, ct, sk, q, n, m, d, f)              \
+  eval_circuit_impl (x, y, ct, sk, n, m, d, f)
+#define eval_circuit_seed(x, y, z, ct, sk, q, n, m, d, extract, arg) \
+  eval_circuit_seed_impl (x, y, ct, sk, n, m, d, extract, arg)
 #else
-#define eval_circuit(y, z, ct, sk, q, n, m, d, f)                 \
-  eval_circuit_impl (y, z, ct, sk, n, m, d, f)
-#define eval_circuit_seed(y, z, ct, sk, q, n, m, d, extract, arg) \
-  eval_circuit_seed_impl (y, z, ct, sk, n, m, d, extract, arg)
+#define eval_circuit(x, y, z, ct, sk, q, n, m, d, f)              \
+  eval_circuit_impl (x, y, z, ct, sk, n, m, d, f)
+#define eval_circuit_seed(x, y, z, ct, sk, q, n, m, d, extract, arg) \
+  eval_circuit_seed_impl (x, y, z, ct, sk, n, m, d, extract, arg)
 #endif
 #endif
 
@@ -200,15 +204,15 @@ union vecX_t {
 #define linear_circuit(x, y, z, sk, ct, i, q, n, m, d, f)         \
   linear_circuit_impl (x, y, z, sk, ct, i, q, n, m, f)
 #if DEGREE == 2
-#define eval_circuit(y, z, ct, sk, q, n, m, d, f)                 \
-  eval_circuit_impl (y, ct, sk, q, n, m, f)
-#define eval_circuit_seed(y, z, ct, sk, q, n, m, d, extract, arg) \
-  eval_circuit_seed_impl (y, ct, sk, q, n, m, extract, arg)
+#define eval_circuit(x, y, z, ct, sk, q, n, m, d, f)              \
+  eval_circuit_impl (x, y, ct, sk, q, n, m, f)
+#define eval_circuit_seed(x, y, z, ct, sk, q, n, m, d, extract, arg) \
+  eval_circuit_seed_impl (x, y, ct, sk, q, n, m, extract, arg)
 #else
-#define eval_circuit(y, z, ct, sk, q, n, m, d, f)                 \
-  eval_circuit_impl (y, z, ct, sk, q, n, m, f)
-#define eval_circuit_seed(y, z, ct, sk, q, n, m, d, extract, arg) \
-  eval_circuit_seed_impl (y, z, ct, sk, q, n, m, extract, arg)
+#define eval_circuit(x, y, z, ct, sk, q, n, m, d, f)              \
+  eval_circuit_impl (x, y, z, ct, sk, q, n, m, f)
+#define eval_circuit_seed(x, y, z, ct, sk, q, n, m, d, extract, arg) \
+  eval_circuit_seed_impl (x, y, z, ct, sk, q, n, m, extract, arg)
 #endif
 
 #endif
@@ -244,6 +248,9 @@ void
 batch_copy (uintX_t *dest, const uintX_t *src, int q, int n);
 
 void
+batch_neg (uintX_t *dest, int q, int n);
+
+void
 batch_add (uintX_t *dest, const uintX_t *src, int q, int n);
 
 void
@@ -269,12 +276,12 @@ linear_circuit (uintX_t *x, uintX_t *y, uintX_t *z, const uintX_t *sk,
                 const uintX_t *f);
 
 void
-eval_circuit (uintX_t *y, uintX_t *z, uintX_t *ct,
+eval_circuit (uintX_t *x, uintX_t *y, uintX_t *z, uintX_t *ct,
               const uintX_t *sk, int q, int n, int m, int d,
               const uintX_t *f);
 
 void
-eval_circuit_seed (uintX_t *y, uintX_t *z, uintX_t *ct,
+eval_circuit_seed (uintX_t *x, uintX_t *y, uintX_t *z, uintX_t *ct,
                    const uintX_t *sk, int q, int n, int m, int d,
                    void (*extract) (void *, size_t, void *), void *arg);
 

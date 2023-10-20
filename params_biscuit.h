@@ -15,13 +15,15 @@
 
 #define S_BITS(q, n) ((n) * LOG2 (q))
 #define T_BITS(q, m) ((m) * LOG2 (q))
+#define X_BITS(q, m, d) (((d) - 1) * (m) * LOG2 (q))
 #define YZ_BITS(q, m, d) ((2 * (d) - 3) * (m) * LOG2 (q))
 #define A_BITS(q, m, d) (((d) - 1) * (m) * LOG2 (q))
 
 #ifndef COMPACT_SK
 #define GET_PRIVKEY_BYTES(lambda, tau, N, q, n, m, d)                   \
   (((lambda) >> 3) +                                                    \
-   CDIV8 (S_BITS((q), (n)) + T_BITS((q), (m)) + YZ_BITS((q), (m), (d))))
+   CDIV8 (S_BITS((q), (n)) + T_BITS((q), (m)) +                         \
+          X_BITS((q), (m), (d)) + YZ_BITS((q), (m), (d))))
 #else
 #define GET_PRIVKEY_BYTES(lambda, tau, N, q, n, m, d) (2 * ((lambda) >> 3))
 #endif

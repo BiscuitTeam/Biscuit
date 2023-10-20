@@ -67,7 +67,7 @@ index_sample (int N, int lN, h_ctx_t h_ctx)
 #endif
 #if defined(DEGREE) && defined(NB_EQUATIONS)
 #define C ((DEGREE-1)*NB_EQUATIONS)
-#define Cm ((DEGREE-1)*NB_EQUATIONS)
+#define Cm ((DEGREE-2)*NB_EQUATIONS)
 #endif
 #if defined(FIELD_SIZE) && defined(NB_VARIABLES)
 #define sklen ((LOG2(FIELD_SIZE)*NB_VARIABLES+7)>>3)
@@ -128,6 +128,7 @@ keygen (uint8_t *sk, uint8_t *pk, const uint8_t *entropy,
   uintX_t s[sklenX];
   uintX_t t[pklenX];
 #ifndef COMPACT_SK
+  uintX_t x[ClenX];
   uintX_t y[ClenX];
 #ifdef HIGH_DEGREE
   uintX_t z[ClenX];
@@ -146,12 +147,13 @@ keygen (uint8_t *sk, uint8_t *pk, const uint8_t *entropy,
   expand_init (expand_ctx, seedF, lambda >> 3);
 #ifndef COMPACT_SK
 #ifdef HIGH_DEGREE
-  eval_circuit_seed (y, z, t, s, q, n, m, d, extract_arg, expand_ctx);
+  eval_circuit_seed (x, y, z, t, s, q, n, m, d, extract_arg, expand_ctx);
 #else
-  eval_circuit_seed (y, NULL, t, s, q, n, m, d, extract_arg, expand_ctx);
+  eval_circuit_seed (x, y, NULL, t, s, q, n, m, d, extract_arg, expand_ctx);
 #endif
 #else
-  eval_circuit_seed (NULL, NULL, t, s, q, n, m, d, extract_arg, expand_ctx);
+  eval_circuit_seed (NULL, NULL, NULL, t, s, q, n, m, d,
+                     extract_arg, expand_ctx);
 #endif
 
 #ifndef COMPACT_SK
@@ -163,6 +165,8 @@ keygen (uint8_t *sk, uint8_t *pk, const uint8_t *entropy,
   offset += n;
   batch_export (sk, t, q, m, offset);
   offset += m;
+  batch_export (sk, x, q, C, offset);
+  offset += C;
   batch_export (sk, y, q, C, offset);
 #ifdef HIGH_DEGREE
   offset += C;
@@ -186,7 +190,7 @@ int
 sign (uint8_t *sig, const uint8_t *msg, uint64_t msglen, const uint8_t *sk,
       const uint8_t *entropy, const params_t *params)
 {
-  int e, i;
+  int e, i, j;
   int offset;
 
 #ifndef SEC_LEVEL
@@ -250,14 +254,22 @@ sign (uint8_t *sig, const uint8_t *msg, uint64_t msglen, const uint8_t *sk,
   uint8_t root[tau][lambda >> 3];
   uint8_t com[tau][N][lambda >> 2];
 
-  uintX_t a[tau][N][ClenX], c[tau][N][ClenX];
-  uintX_t x[tau][N][ClenX], y[tau][N][ClenX], z[tau][N][ClenX];
+  uintX_t a[tau][lN][ClenX], c[tau][lN][ClenX];
+  uintX_t x[tau][lN][ClenX], y[tau][lN][ClenX], z[tau][lN][ClenX];
 
-  uintX_t sk_s[sklenX], sk_y[ClenX], sk_t[pklenX];
+  uintX_t sH[tau][N][sklenX];
+#ifdef HIGH_DEGREE
+  uintX_t zH[tau][N][ClenX];
+#endif
+  uintX_t aH[tau][N][ClenX];
+  uintX_t epsilon[tau][ClenX];
+  uintX_t open_a[tau][ClenX];
+
+  uintX_t sk_s[sklenX], sk_x[ClenX], sk_y[ClenX], sk_t[pklenX];
 #ifdef HIGH_DEGREE
   uintX_t sk_z[ClenX];
 #endif
-  uintX_t f[(d + 1) * (pklenX + sklenX * m)];
+  uintX_t f[d * (pklenX + sklenX * m) + (pklenX + sklenX * (m - n))];
 
   BATCH_PARAMS (q, n, m, d);
 
@@ -271,6 +283,8 @@ sign (uint8_t *sig, const uint8_t *msg, uint64_t msglen, const uint8_t *sk,
   offset += n;
   batch_import (sk_t, sk_data, q, m, offset);
   offset += m;
+  batch_import (sk_x, sk_data, q, C, offset);
+  offset += C;
   batch_import (sk_y, sk_data, q, C, offset);
 #ifdef HIGH_DEGREE
   offset += C;
@@ -285,9 +299,9 @@ sign (uint8_t *sig, const uint8_t *msg, uint64_t msglen, const uint8_t *sk,
 #ifdef COMPACT_SK
   /* Evaluate the circuit for intermediate values */
 #ifdef HIGH_DEGREE
-  eval_circuit (sk_y, sk_z, sk_t, sk_s, q, n, m, d, f);
+  eval_circuit (sk_x, sk_y, sk_z, sk_t, sk_s, q, n, m, d, f);
 #else
-  eval_circuit (sk_y, NULL, sk_t, sk_s, q, n, m, d, f);
+  eval_circuit (sk_x, sk_y, NULL, sk_t, sk_s, q, n, m, d, f);
 #endif
 #endif
 
@@ -322,7 +336,8 @@ sign (uint8_t *sig, const uint8_t *msg, uint64_t msglen, const uint8_t *sk,
   H1_init (hash_ctx, salt, msg, msglen, lambda);
   for (e = 0; e < tau; e++)
     {
-      uintX_t s_e[N][sklenX];
+      uintX_t s_e[lN][sklenX];
+      uintX_t cH_e[N][ClenX];
 
       uintX_t delta_s_e[sklenX];
 #ifdef HIGH_DEGREE
@@ -338,15 +353,25 @@ sign (uint8_t *sig, const uint8_t *msg, uint64_t msglen, const uint8_t *sk,
       /* Get N seeds from root_e */
       get_seeds ((void *) seed_e, root[e], salt, e, N, lambda);
 
+      /* Prepare computation of s_e, a[e] and c[e] */
+      for (i = 0; i < lN; i++)
+        {
+          batch_clear (s_e[i], q, n);
+#ifdef HIGH_DEGREE
+          batch_clear (z[e][i], q, C);
+#endif
+          batch_clear (a[e][i], q, C);
+          batch_clear (c[e][i], q, C);
+        }
       /* Prepare computation of delta_s_e, init with sk_s */
       batch_copy (delta_s_e, sk_s, q, n);
 #ifdef HIGH_DEGREE
       /* Prepare computation of delta_z_e, init with sk_z */
       batch_copy (delta_z_e, sk_z, q, Cm);
 #endif
-      /* Prepare computation of delta_c_e with tmp_e, init with 0 */
+      /* Prepare computation of delta_c_e with open_a[e], init with 0 */
       batch_clear (delta_c_e, q, C);
-      batch_clear (tmp_e, q, C);
+      batch_clear (open_a[e], q, C);
       for (i = 0; i < N; i++)
         {
           h_ctx_t tape_ei_ctx;
@@ -356,43 +381,60 @@ sign (uint8_t *sig, const uint8_t *msg, uint64_t msglen, const uint8_t *sk,
 
           /* Expand random from tape_ei */
           expandtape_init (tape_ei_ctx, salt, e, i, seed_e[i], lambda);
-          batch_sample (s_e[i], q, n, tape_ei_ctx);
+          batch_sample (sH[e][i], q, n, tape_ei_ctx);
 #ifdef HIGH_DEGREE
-          batch_sample (z[e][i], q, Cm, tape_ei_ctx);
+          batch_sample (zH[e][i], q, Cm, tape_ei_ctx);
 #endif
-          batch_sample (a[e][i], q, C, tape_ei_ctx);
-          batch_sample (c[e][i], q, C, tape_ei_ctx);
+          batch_sample (aH[e][i], q, C, tape_ei_ctx);
+          batch_sample (cH_e[i], q, C, tape_ei_ctx);
 
           /* Iterated to obtain delta_s_e = sk_s - sum(s_e[i]) */
-          batch_sub (delta_s_e, s_e[i], q, n);
+          batch_sub (delta_s_e, sH[e][i], q, n);
 #ifdef HIGH_DEGREE
           /* Iterated to obtain delta_z_e = sk_z - sum(z_e[i]) */
-          batch_sub (delta_z_e, z[e][i], q, Cm);
+          batch_sub (delta_z_e, zH[e][i], q, Cm);
 #endif
-          /* Iterated to obtain tmp_e = sum(a_e[i]) */
-          batch_add (tmp_e, a[e][i], q, C);
+          /* Iterated to obtain open_a[e] = sum(a_e[i]) */
+          batch_add (open_a[e], aH[e][i], q, C);
           /* Iterated to obtain delta_c_e = - sum(c_e[i]) */
-          batch_sub (delta_c_e, c[e][i], q, C);
+          batch_sub (delta_c_e, cH_e[i], q, C);
 
           /* Add com[e][i] to sigma1 */
           H1_update (hash_ctx, com[e][i], lambda >> 2);
         }
       /* Obtain delta_c_e = sk_y * sum(a_e[i]) - sum(c_e[i]) */
+      batch_copy (tmp_e, open_a[e], q, C);
       batch_mul (tmp_e, sk_y, q, C);
       batch_add (delta_c_e, tmp_e, q, C);
 
       /* Correct s_e[0], z[e][0] and c[e][0] */
-      batch_add (s_e[0], delta_s_e, q, n);
+      batch_add (sH[e][0], delta_s_e, q, n);
 #ifdef HIGH_DEGREE
-      batch_add (z[e][0], delta_z_e, q, Cm);
+      batch_add (zH[e][0], delta_z_e, q, Cm);
 #endif
-      batch_add (c[e][0], delta_c_e, q, C);
+      batch_add (cH_e[0], delta_c_e, q, C);
 
-      for (i = 0; i < N; i++)
+      for (i = 0; i < lN; i++)
+        {
+          for (j = 0; j < N; j++)
+            {
+              if (((j >> i) & 1) == 0)
+                {
+                  batch_add (s_e[i], sH[e][j], q, n);
+#ifdef HIGH_DEGREE
+                  batch_add (z[e][i], zH[e][j], q, Cm);
+#endif
+                  batch_add (a[e][i], aH[e][j], q, C);
+                  batch_add (c[e][i], cH_e[j], q, C);
+                }
+            }
+        }
+
+      for (i = 0; i < lN; i++)
         {
           /* Compute the shares x[e][i], y[e][i], z[e][i] */
           /* involved in multiplications */
-          linear_circuit (x[e][i], y[e][i], z[e][i], s_e[i], sk_t, i,
+          linear_circuit (x[e][i], y[e][i], z[e][i], s_e[i], sk_t, 0,
                           q, n, m, d, f);
         }
 
@@ -419,7 +461,7 @@ sign (uint8_t *sig, const uint8_t *msg, uint64_t msglen, const uint8_t *sk,
 
   /* Phase 2: Challenging the checking protocol */
 
-  /* Prepare expansion of epsilon_e challenges */
+  /* Prepare expansion of epsilon[e] challenges */
   expand_init (expand_ctx, h1, lambda >> 2);
 
 
@@ -430,39 +472,41 @@ sign (uint8_t *sig, const uint8_t *msg, uint64_t msglen, const uint8_t *sk,
   for (e = 0; e < tau; e++)
     {
       uintX_t open_alpha_e[ClenX];
-      uintX_t epsilon_e[ClenX];
 
-      /* Obtain challenge epsilon_e */
-      batch_sample (epsilon_e, q, C, expand_ctx);
+      /* Obtain challenge epsilon[e] */
+      batch_sample (epsilon[e], q, C, expand_ctx);
+
+      /* Compute open_alpha_e = sk_x * epsilon[e] + open_a[e] */
+      batch_copy (open_alpha_e, sk_x, q, C);
+      batch_mul (open_alpha_e, epsilon[e], q, C);
+      batch_add (open_alpha_e, open_a[e], q, C);
 
       /* Use variables a[e][i] to store shares of alpha_e */
-      /* Prepare computation of open_alpha_e, init with 0 */
-      batch_clear (open_alpha_e, q, C);
-      for (i = 0; i < N; i++)
+      for (i = 0; i < lN; i++)
         {
-          /* Compute alpha[e][i] = x[e][i] * epsilon_e + a[e][i] */
-          batch_mul (x[e][i], epsilon_e, q, C);
+          /* Compute alpha[e][i] = x[e][i] * epsilon[e] + a[e][i] */
+          batch_mul (x[e][i], epsilon[e], q, C);
           batch_add (a[e][i], x[e][i], q, C);
 
-          /* Iterated to obtain open_alpha_e = sum(alpha[e][i]) */
-          batch_add (open_alpha_e, a[e][i], q, C);
-
           /* Add alpha[e][i] in sigma2 */
+          H2_update (hash_ctx, (void *) a[e][i], Clen);
+
+          batch_sub (a[e][i], open_alpha_e, q, C);
+          batch_neg (a[e][i], q, C);
+
+          /* Add alpha[e][i + 1] in sigma2 */
           H2_update (hash_ctx, (void *) a[e][i], Clen);
         }
 
       /* Use variables y[e][i] to store v[e][i] values */
-      for (i = 0; i < N; i++)
+      for (i = 0; i < lN; i++)
         {
           /* Compute v[e][i] = y[e][i] * open_alpha_e */
-          /*                 - z[e][i] * epsilon_e - c[e][i] */
+          /*                 - z[e][i] * epsilon[e] - c[e][i] */
           batch_mul (y[e][i], open_alpha_e, q, C);
-          batch_mul (z[e][i], epsilon_e, q, C);
+          batch_mul (z[e][i], epsilon[e], q, C);
           batch_sub (y[e][i], z[e][i], q, C);
           batch_sub (y[e][i], c[e][i], q, C);
-        }
-      for (i = 0; i < N; i++)
-        {
           /* Add v[e][i] in sigma2 */
           H2_update (hash_ctx, (void *) y[e][i], Clen);
         }
@@ -489,8 +533,18 @@ sign (uint8_t *sig, const uint8_t *msg, uint64_t msglen, const uint8_t *sk,
       get_path (sig_path[e], root[e], salt, e, ibar_e, N, lambda);
       /* Copy com[e][ibar_e] in signature */
       memcpy (sig_com[e], com[e][ibar_e], lambda >> 2);
+      /* Recompute alpha[e][ibar_e] in aH[e][ibar_e] */
+#ifdef HIGH_DEGREE
+      linear_circuit (x[e][0], y[e][0], zH[e][ibar_e], sH[e][ibar_e], sk_t,
+                      ibar_e, q, n, m, d, f);
+#else
+      linear_circuit (x[e][0], y[e][0], z[e][0], sH[e][ibar_e], sk_t,
+                      ibar_e, q, n, m, d, f);
+#endif
+      batch_mul (x[e][0], epsilon[e], q, C);
+      batch_add (aH[e][ibar_e], x[e][0], q, C);
       /* Export alpha[e][ibar_e] in signature */
-      batch_export (sigma, a[e][ibar_e], q, C, offset);
+      batch_export (sigma, aH[e][ibar_e], q, C, offset);
       offset += C;
     }
 
@@ -501,7 +555,7 @@ int
 verify (const uint8_t *sig, const uint8_t *msg, uint64_t msglen,
         const uint8_t *pk, const params_t *params)
 {
-  int e, i;
+  int e, i, j;
   int offset;
 
 #ifndef SEC_LEVEL
@@ -567,7 +621,7 @@ verify (const uint8_t *sig, const uint8_t *msg, uint64_t msglen,
   uint8_t h2p[lambda >> 2];
 
   uintX_t pk_t[pklenX];
-  uintX_t f[(d + 1) * (pklenX + sklenX * m)];
+  uintX_t f[d * (pklenX + sklenX * m) + (pklenX + sklenX * (m - n))];
 
   BATCH_PARAMS (q, n, m, d);
 
@@ -595,8 +649,15 @@ verify (const uint8_t *sig, const uint8_t *msg, uint64_t msglen,
     {
       uint8_t com_e[N][lambda >> 2];
 
-      uintX_t a_e[N][ClenX], c_e[N][ClenX];
-      uintX_t x_e[N][ClenX], y_e[N][ClenX], z_e[N][ClenX];
+      uintX_t a_e[lN][ClenX], c_e[lN][ClenX];
+      uintX_t x_e[lN][ClenX], y_e[lN][ClenX], z_e[lN][ClenX];
+
+      uintX_t partial_s_e[sklenX];
+      uintX_t partial_x_e[ClenX];
+      uintX_t partial_z_e[ClenX];
+      uintX_t partial_a_e[ClenX];
+
+      uintX_t a_ibar_e[ClenX];
 
       uintX_t epsilon_e[ClenX];
       uint16_t ibar_e;
@@ -639,10 +700,32 @@ verify (const uint8_t *sig, const uint8_t *msg, uint64_t msglen,
       batch_import (delta_c_e, sigma, q, C, offset);
       offset += C;
 
+      /* Prepare computation of s_e, z_e, a_e and c_e */
+      for (i = 0; i < lN; i++)
+        {
+          batch_clear (s_e[i], q, n);
+#ifdef HIGH_DEGREE
+          batch_clear (z_e[i], q, C);
+#endif
+          batch_clear (a_e[i], q, C);
+          batch_clear (c_e[i], q, C);
+        }
+      batch_clear (partial_s_e, q, n);
+#ifdef HIGH_DEGREE
+      batch_clear (partial_z_e, q, C);
+#endif
+      batch_clear (partial_a_e, q, C);
+
       for (i = 0; i < N; i++)
         {
           if (i != ibar_e)
             {
+              uintX_t sH_ei[sklenX];
+#ifdef HIGH_DEGREE
+              uintX_t zH_ei[ClenX];
+#endif
+              uintX_t aH_ei[ClenX], cH_ei[ClenX];
+
               h_ctx_t tape_ei_ctx;
 
               /* Compute commitment on seed_e[i] */
@@ -650,29 +733,57 @@ verify (const uint8_t *sig, const uint8_t *msg, uint64_t msglen,
 
               /* Expand random from tape_ei */
               expandtape_init (tape_ei_ctx, salt, e, i, seed_e[i], lambda);
-              batch_sample (s_e[i], q, n, tape_ei_ctx);
+              batch_sample (sH_ei, q, n, tape_ei_ctx);
 #ifdef HIGH_DEGREE
-              batch_sample (z_e[i], q, Cm, tape_ei_ctx);
+              batch_sample (zH_ei, q, Cm, tape_ei_ctx);
 #endif
-              batch_sample (a_e[i], q, C, tape_ei_ctx);
-              batch_sample (c_e[i], q, C, tape_ei_ctx);
+              batch_sample (aH_ei, q, C, tape_ei_ctx);
+              batch_sample (cH_ei, q, C, tape_ei_ctx);
               if (i == 0)
                 {
                   /* Correct s_e[0], z_e[0] and c_e[0] */
-                  batch_add (s_e[0], delta_s_e, q, n);
+                  batch_add (sH_ei, delta_s_e, q, n);
 #ifdef HIGH_DEGREE
-                  batch_add (z_e[0], delta_z_e, q, Cm);
+                  batch_add (zH_ei, delta_z_e, q, Cm);
 #endif
-                  batch_add (c_e[0], delta_c_e, q, C);
+                  batch_add (cH_ei, delta_c_e, q, C);
                 }
 
-              /* Compute the shares x_e[i], y_e[i], z_e[i] */
-              /* involved in multiplications */
-              linear_circuit (x_e[i], y_e[i], z_e[i], s_e[i], pk_t, i,
-                              q, n, m, d, f);
+              for (j = 0; j < lN; j++)
+                {
+                  if (((i >> j) & 1) != ((ibar_e >> j) & 1))
+                    {
+                      batch_add (s_e[j], sH_ei, q, n);
+#ifdef HIGH_DEGREE
+                      batch_add (z_e[j], zH_ei, q, Cm);
+#endif
+                      batch_add (a_e[j], aH_ei, q, C);
+                      batch_add (c_e[j], cH_ei, q, C);
+                    }
+                }
+              batch_add (partial_s_e, sH_ei, q, n);
+#ifdef HIGH_DEGREE
+              batch_add (partial_z_e, zH_ei, q, C);
+#endif
+              batch_add (partial_a_e, aH_ei, q, C);
             }
-          /* Add com_e[i] to sigma1 */
+          /* Add com[e][i] to sigma1 */
           H1_update (hash1_ctx, com_e[i], lambda >> 2);
+        }
+
+      /* Compute the shares partial_x_e involved in multiplications */
+      /* use y_e[0] as dummy value */
+      linear_circuit (partial_x_e, y_e[0], partial_z_e, partial_s_e, pk_t,
+                      ibar_e ? 0 : 1,
+                      q, n, m, d, f);
+
+      for (i = 0; i < lN; i++)
+        {
+          /* Compute the shares x_e[i], y_e[i], z_e[i] */
+          /* involved in multiplications */
+          linear_circuit (x_e[i], y_e[i], z_e[i], s_e[i], pk_t,
+                          ibar_e ? (1 ^ ((ibar_e >> i) & 1)) : 1,
+                          q, n, m, d, f);
         }
 
       /* Add delta values to sigma1 */
@@ -689,48 +800,49 @@ verify (const uint8_t *sig, const uint8_t *msg, uint64_t msglen,
 #else
       offset = tau * (n + C) + e * C;
 #endif
-      batch_import (a_e[ibar_e], sigma, q, C, offset);
+      batch_import (a_ibar_e, sigma, q, C, offset);
       offset += C;
 
-      /* Prepare computation of open_alpha_e, init with alpha_e[ibar_e] */
-      batch_copy (open_alpha_e, a_e[ibar_e], q, C);
-      for (i = 0; i < N; i++)
-        {
-          if (i != ibar_e)
-            {
-              /* Compute alpha_e[i] = x_e[i] * epsilon_e + a_e[i] */
-              batch_mul (x_e[i], epsilon_e, q, C);
-              batch_add (a_e[i], x_e[i], q, C);
+      batch_copy (open_alpha_e, partial_x_e, q, C);
+      batch_mul (open_alpha_e, epsilon_e, q, C);
+      batch_add (open_alpha_e, partial_a_e, q, C);
+      batch_add (open_alpha_e, a_ibar_e, q, C);
 
-              /* Iterated to obtain open_alpha_e = sum(alpha_e[i]) */
-              batch_add (open_alpha_e, a_e[i], q, C);
-            }
+      for (i = 0; i < lN; i++)
+        {
+          /* Compute alpha_e[i] = x_e[i] * epsilon_e + a_e[i] */
+          batch_mul (x_e[i], epsilon_e, q, C);
+          batch_add (a_e[i], x_e[i], q, C);
+
+          batch_copy (a_ibar_e, open_alpha_e, q, C);
+          batch_sub (a_ibar_e, a_e[i], q, C);
 
           /* Add alpha_e[i] in sigma2 */
-          H2_update (hash2_ctx, (void *) a_e[i], Clen);
+          if (((ibar_e >> i) & 1))
+            {
+              H2_update (hash2_ctx, (void *) a_e[i], Clen);
+              H2_update (hash2_ctx, (void *) a_ibar_e, Clen);
+            }
+          else
+            {
+              H2_update (hash2_ctx, (void *) a_ibar_e, Clen);
+              H2_update (hash2_ctx, (void *) a_e[i], Clen);
+            }
         }
 
       /* Use variables y_e[i] to store v_e[i] values */
-      /* Prepare computation of v_e[ibar_e], init with 0 */
-      batch_clear (y_e[ibar_e], q, C);
-      for (i = 0; i < N; i++)
+      for (i = 0; i < lN; i++)
         {
-          if (i != ibar_e)
+          /* Compute v_e[i] = y_e[i] * open_alpha_e */
+          /*                - z_e[i] * epsilon_e - c_e[i] */
+          batch_mul (y_e[i], open_alpha_e, q, C);
+          batch_mul (z_e[i], epsilon_e, q, C);
+          batch_sub (y_e[i], z_e[i], q, C);
+          batch_sub (y_e[i], c_e[i], q, C);
+          if (!((ibar_e >> i) & 1))
             {
-              /* Compute v_e[i] = y_e[i] * open_alpha_e */
-              /*                - z_e[i] * epsilon_e - c_e[i] */
-              batch_mul (y_e[i], open_alpha_e, q, C);
-              batch_mul (z_e[i], epsilon_e, q, C);
-              batch_sub (y_e[i], z_e[i], q, C);
-              batch_sub (y_e[i], c_e[i], q, C);
-
-              /* Iterated to obtain v_e[ibar_e] = 0 - sum(v_e[i]) */
-              /* for i != ibar[e] */
-              batch_sub (y_e[ibar_e], y_e[i], q, C);
+              batch_neg (y_e[i], q, C);
             }
-        }
-      for (i = 0; i < N; i++)
-        {
           /* Add v_e[i] in sigma2 */
           H2_update (hash2_ctx, (void *) y_e[i], Clen);
         }

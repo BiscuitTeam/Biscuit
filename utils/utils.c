@@ -179,6 +179,24 @@ child_seeds (uint8_t *output, const uint8_t *parent, const uint8_t *salt,
 }
 
 void
+get_seed (uint8_t *output, const uint8_t *seed, const uint8_t *salt,
+          uint16_t e, uint16_t i, uint16_t N, int seclevel)
+{
+  int l, lN;
+  uint8_t buffer[64];
+
+  lN = ilog2 (N);
+
+  memcpy (output, seed, seclevel >> 3);
+  for (l = 0; l < lN; l++)
+    {
+      child_seeds (buffer, output, salt, e, l, i >> (lN - l), seclevel);
+      memcpy (output, buffer + ((i >> (lN - l - 1)) & 1) * (seclevel >> 3),
+              seclevel >> 3);
+    }
+}
+
+void
 get_seeds (uint8_t *output, const uint8_t *seed, const uint8_t *salt,
            uint16_t e, uint16_t N, int seclevel)
 {
