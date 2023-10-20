@@ -3,11 +3,11 @@
 
 /* variable MPCitH params */
 #define SEC_LEVEL 128
-#define NB_ITERATIONS 34
-#define NB_PARTIES 16
+#define NB_ITERATIONS 18
+#define NB_PARTIES 256
 
 /* variable posso params */
-#define NB_VARIABLES 64
-#define NB_EQUATIONS 67
+#define NB_VARIABLES 50
+#define NB_EQUATIONS 52
 
 #endif

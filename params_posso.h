@@ -4,7 +4,7 @@
 /* #define GF2K_ARITH_USE_TABLES */
 
 /* fixed posso params */
-#define FIELD_SIZE 16
+#define FIELD_SIZE 256
 #define DEGREE 2
 
 #endif
