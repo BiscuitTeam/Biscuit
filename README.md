@@ -19,7 +19,6 @@ Biscuit: Shorter MPC-based Signature from PoSSo
 │   └── mul_gf2_*.inc
 ├── biscuit.h           # main header
 ├── biscuit.c           # main file
-├── biscuit_mq_ref.c    # main file (reference, only for d=2)
 ├── nist/               # NIST package (rng and api)
 │   ├── rng.h
 │   ├── rng.c
