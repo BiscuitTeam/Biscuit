@@ -317,10 +317,10 @@ sign (uint8_t *sig, const uint8_t *msg, uint64_t msglen, const uint8_t *sk,
 #ifndef COMPACT_SK
 #ifdef HIGH_DEGREE
   prf_update (expand_ctx, sk, (lambda >> 3)
-              + CDIV8 (batch_getbitlen (q, n + m + C + Cm)));
+              + CDIV8 (batch_getbitlen (q, n + m + C + C + Cm)));
 #else
   prf_update (expand_ctx, sk, (lambda >> 3)
-              + CDIV8 (batch_getbitlen (q, n + m + C)));
+              + CDIV8 (batch_getbitlen (q, n + m + C + C)));
 #endif
 #else
   prf_update (expand_ctx, sk, lambda >> 2);
